@@ -7,7 +7,7 @@ import math
 
 from bitarray import bitarray
 
-from PyDL.utils import ncr, not_empty_subsets, banker_sequence
+from utils import ncr, not_empty_subsets, banker_sequence
 
 
 ################################################################################

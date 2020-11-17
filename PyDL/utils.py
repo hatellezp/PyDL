@@ -6,7 +6,7 @@ import scipy.optimize
 from bitstring import BitArray
 from bitarray import bitarray
 
-from typing import Generator, List, Union, Optional
+from typing import Generator, List, Union, Optional, Tuple
 import operator as op
 from functools import reduce
 
@@ -200,6 +200,49 @@ def find_all_not_empty_subsets(b: Union[bitarray, int], n: Optional[int] = None)
         raise TypeError("'b' argument of type {}, expected int or bitarray".format(type(b)))
 
 
+def bit_diff(x: bitarray, y: bitarray, detailed: bool = False) -> Tuple[List[int], int]:
+    """
+    computes the difference between two bitarrays modeling subsets of a set
+
+    :param x: first bitarray
+    :param y: second bitarray
+    :param detailed: if a list of the detailed difference should be returned
+    :return:  a tuple: l,d where l is a list of the detailed difference and
+              d values -1 if y is bigger, 1 if x is bigger, 0 if they are the
+              same or 2 if they are incomparable
+    """
+    xl = len(x)
+    yl = len(y)
+
+    if xl != yl:
+        raise ValueError("mismatched length, 'x' lenght: {}, 'y' length: {}".format(xl, yl))
+    else:
+        sign = 0
+        res = []
+        for i in range(xl):
+            d = x[i] - y[i]
+
+            # first append the value
+            # if you want only to know the relation then forget about the list
+            if detailed:
+                res.append(d)
+
+            # now the superset or subset logic
+            if sign == 2 or d == 0:
+                continue
+            else:
+                if d == 1 and sign == -1:
+                    sign = 2
+                elif d == -1 and sign == 1:
+                    sign = 2
+                elif sign == 0:
+                    sign = d
+                else:
+                    continue
+
+        return res, sign
+
+
 if __name__ == "__main__":
     print("Hello World from the utils module!")
 
@@ -220,29 +263,22 @@ if __name__ == "__main__":
 
         return tim
 
+    a = bitarray(bin(10)[2:])
+    b = bitarray(bin(11)[2:])
+    c = bitarray(bin(14)[2:])
 
-    for a in banker_sequence(10, 5):
-        print(a)
+    print("a", a)
+    print('b', b)
+    print("c", c)
 
-    # let us compare the numpy and bit array methods
-    a = 100
-    b = 105
-    k = 5
-    x = np.array(np.arange(b - a))
-    ynp = np.zeros(b - a)
-    yba = np.zeros(b - a)
-    t = 1
+    print("a-b", bit_diff(a, b))
+    print("b-a", bit_diff(b, a))
+    print("a-c", bit_diff(a, c))
+    print("c-a", bit_diff(c, a))
+    print("b-c", bit_diff(b, c))
+    print("c-b", bit_diff(c, b))
 
-    for i in x:
-        ynp[i] = time_tracker(i, k, t, method='numpy')
-        yba[i] = time_tracker(i, k, t, method='bitarray')
-        print("size {} done".format(i))
+    print("a-a", bit_diff(a, a))
 
 
-    plt.plot(x, ynp)
-    plt.plot(x, yba)
-
-    plt.legend(['numpy', 'bitarray'])
-
-    plt.show()
 
