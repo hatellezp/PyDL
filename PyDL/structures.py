@@ -8,6 +8,7 @@ import math
 from bitarray import bitarray
 
 from utils import ncr, not_empty_subsets, banker_sequence
+from SOD import SOD
 
 
 ################################################################################
@@ -125,9 +126,9 @@ class Bag:
         return self.data[x]
 
     @staticmethod
-    def subbag(b: 'Bag', new_filter: Union[np.ndarray, BitArray],
-               old_sb: Optional['Bag'],
-               old_filter: Optional[Union[np.ndarray, BitArray]]) -> 'Bag':
+    def subbag(b: 'Bag', new_filter: Union[np.ndarray, bitarray],
+               old_sb: Optional['Bag'] = None,
+               old_filter: Optional[Union[np.ndarray, bitarray]] = None) -> 'Bag':
 
         if old_filter is None or old_sb is None:
             return Bag([b[i] for i in new_filter if i])
@@ -180,10 +181,12 @@ class Rule:
 class Reasoner:
     def __init__(self, _rules: Iterable[Rule],
                  _max_inconsistency: Optional[int],
-                 _engine: Callable[[Iterable[Rule], Bag], bool]):
+                 _engine: Callable[[Iterable[Rule], Bag], bool],
+                 _credibility: Callable[[Bag], float]):  # or int here at the end?
         self.rules = OrderedDict()
         self.max_arity = None
         self.min_arity = None
+        self.credibility = _credibility
 
         accum = 0
         for r in _rules:
@@ -203,86 +206,61 @@ class Reasoner:
         self.max_inconsistency = _max_inconsistency  # It may depend of the underlying logic or of the current rules themselves
         self.engine = _engine
 
-    @staticmethod
-    def _succesor(i: int, n: int, black_list: np.ndarray) -> np.ndarray:
-        return np.array([j for j in range(i + 1, n) if j not in black_list])
-
-    @staticmethod
-    def _little_bag(i: int, current_depth, depth: int, index: int,
-                    black_list: np.ndarray, lb: Bag, b: Bag) -> Bag:
-        if current_depth == depth:
-            return lb
-        else:
-            # TODO: I'm here
-            pass
-
-    def compile_conflict_matrix_detailed(self, b: Bag) -> np.ndarray:
-        """
-        How this works:
-        - decide the size of the matrix (number of facts)x(number of revelant sets)
-        - order them
-        - apply rules in order ? maybe this is the engine that should do the work
-        - go in an increasing way for the sets and in that way avoid pointless computation
-
-        :param b: a bag of facts that can be structured by the rules
-        :return: a detailed matrix with all interactions between the facts in the bag b
+    def compile_conflict_matrix_detailed(self, b: Bag) -> SOD:
         """
 
-        b_length = len(b)
+        :param b: a bag of facts
+        :return: a SOD (subset ordered dict
+        """
+        # size of the bag
+        b_lenght = len(b)
 
-        # three possibilities:
-        # 1:  there is max_inconsistency defined and is less than the size of b
-        # 2: there is max_inconsistency defined but is more than the size of b
-        # 3: there is no max_inconsistency defined
-        # we add two dimensions at the end and not one because you need the
-        # True and False indicator
+        # create an SOD
+        sod = SOD(size=b_lenght)
 
-        # First create a vector (a BitArray!) that stores the consistency of
-        # all important subsets
-        inconsistency_limit = (b_length
-                               if (self.max_inconsistency is None or
-                                   self.max_inconsistency < b_length)
-                               else self.max_inconsistency)
-        log_inconsistency_limit = int(math.log(inconsistency_limit, 2)) + 1
+        conflict_size_limit = self.max_inconsistency if (self.max_inconsistency
+                                                         is not None and self.max_inconsistency < b_lenght) \
+            else b_lenght
 
-        # this will be a big ass vector that I can't store, so I will store on need
-        inconsistency_dict = OrderedDict
+        """
+        two things:
+            - create generators for the subsets until reach of 'conflict_size_limit'
+            - populate the SOD 
+        """
 
-        if self.max_inconsistency and self.max_inconsistency < b_length:
-            # here we need the number of combinations of k objets in n
-            m = np.zeros((b_length, ncr(b_length, self.max_inconsistency),
-                          2))  # TODO: verify you don't count the empty set, here is not needed
-        elif self.max_inconsistency and self.max_inconsistency >= b_length:
-            m = np.zeros((b_length, int(2 ** b_length), 2))
-        else:
-            m = np.zeros((b_length, int(2 ** b_length), 2))
+        for subset_size in range(1, conflict_size_limit + 1):
+            subset_generator = banker_sequence(b_lenght, subset_size)
 
-        # now we need to populate the matrix
-        # here we apply the rules to each set, but how ? how do we order them ?
-        # I will keep a bag that grows and then shrinks when the loop for a fact is over
-        moving_bag = None
-        for i in range(b_length):
-            current_element = b[i]  # we populate the i-th row
+            # for the moment I don't have an idea to update the bags
+            # Okay now I have an idea:
+            # try to search for a value, and only if it doesn't exist, then
+            # call the engine
+            for subset in subset_generator:
+                subbag = Bag.subbag(b, subset)
 
-            # first thing: verify 'current_element' is not contradictory itself
-            self_consistent = self.engine(self.rules, Bag([current_element]))
-            if not self_consistent:
-                continue
-            else:
-                depth = 2
-                index = 0
+                # try to get the value, if it doesn't exist, only then call the
+                # engine, which is a priori more expensive in computing power
+                try:
+                    a = sod[subset]
+                except KeyError:
+                    sod[subset] = self.engine(self.rules.values(), subbag)
 
-                # build the bags here
-                while depth <= self.max_inconsistency:
-                    pass
+        # as a bonus, all subsets that have sod[subset] as False are minimal :)
+        # that's it
+        return sod
 
-
-
-
+    def compile_conflict_matrix_compressed(self, b: Bag, sod: SOD = None) -> np.ndarray:
+        # compute the sod if it doesn't exist
+        sod = sod if sod is not None else self.compile_conflict_matrix_detailed(self, b)
         pass
 
-    def compile_conflict_matrix_compressed(self, b: Union[Bag, Tuple[Bag, np.ndarray]]) -> np.ndarray:
-        pass
+        b_lenght = len(b)
+
+        conflict_size_limit = self.max_inconsistency if (self.max_inconsistency
+                                                         is not None and self.max_inconsistency < b_lenght) \
+            else b_lenght
+
+        # now what ?
 
     def rank(self, b: Union[Bag, Tuple[Bag, np.ndarray]]) -> None:
         pass

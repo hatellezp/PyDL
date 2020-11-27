@@ -6,6 +6,7 @@ from typing import Union, Optional, List, Generator
 from utils import gac, bit_diff
 
 
+# TOOD: do I really need an ordereddict instead of a normal dict (hash table)?
 class SOD:  # stands for Subset OrderedDict
     """
     how this works: this is nothing else than a wrapper around an ordered dict
@@ -27,7 +28,7 @@ class SOD:  # stands for Subset OrderedDict
         self.size = size
         self.od = OrderedDict()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         res = "["
         for key, item in self.od.items():
             bit_key = gac(key, self.size)
@@ -36,7 +37,14 @@ class SOD:  # stands for Subset OrderedDict
         res += "]"
         return res
 
-    def _find_sets(self, x: bitarray, sub_or_super: int, proper=True) -> List[bitarray]:
+    """
+    Here we have two functions that returns the subsets or supersets,
+    why two ? first returns a list, which consumes more memory but is an
+    static value, the second returns a generator that can only be used when
+    no key is deleted in runtime (hash function changes) 
+    """
+
+    def _find_sets(self, x: bitarray, sub_or_super: int, proper: bool = True) -> List[bitarray]:
         """
         :param x: the subset in question
         :param sub_or_super:  if we are to find supersets (1) or subsets (-1)
@@ -55,14 +63,15 @@ class SOD:  # stands for Subset OrderedDict
                               "supersets or -1 for subsets, found {}")
                              .format(sub_or_super))
 
-    def _find_sets_generator(self, x: bitarray, sub_or_super: int) -> Generator[bitarray, None, None]:
+    def _find_sets_generator(self, x: bitarray, sub_or_super: int, proper: bool = True) -> Generator[bitarray, None, None]:
+        outcomes = [1] if proper else [0,1]
         if sub_or_super == -1:  # to find subsets
             for key in self.od:
-                if bit_diff(x, gac(key, self.size))[1] in [0, 1]:
+                if bit_diff(x, gac(key, self.size))[1] in outcomes:
                     yield key
         elif sub_or_super == 1:    # to find supersets
             for key in self.od:
-                if bit_diff(gac(key, self.size), x)[1] in [0, 1]:
+                if bit_diff(gac(key, self.size), x)[1] in outcomes:
                     yield key
         else:
             raise ValueError(("'sub_or_super' argument must be 1 for "
@@ -73,6 +82,9 @@ class SOD:  # stands for Subset OrderedDict
         int_key = key if isinstance(key, int) else gac(key, self.size)
         bit_key = key if isinstance(key, bitarray) else gac(key, self.size)
 
+        # there is a runtime modification of the OrderedDict here
+        # and python doesn't like it, but I think every other place I
+        # can use generators
         if value:  # because of consistency, all subsets can be deleted
             # TODO: verify this for the love of god !!!
             for subset in self._find_sets(bit_key, -1):
@@ -84,7 +96,7 @@ class SOD:  # stands for Subset OrderedDict
         elif not value:  # because of inconsistency, remember tha that next supersets are not needed
 
             key_can_be_deduced = False
-            for subset in self._find_sets(bit_key, -1):
+            for subset in self._find_sets_generator(bit_key, -1):
                 try:
                     if not self[subset]:
                         key_can_be_deduced = True
@@ -111,19 +123,19 @@ class SOD:  # stands for Subset OrderedDict
             # UPDATE: generators can't be used because they force a runtime mutation and python
             #         doens't like it
 
-            for subset in self._find_sets(bit_key, -1):
+            for subset in self._find_sets_generator(bit_key, -1):
                 try:
                     consistent = self[subset]
-                    if not consistent:
+                    if not consistent:  # if a subset is inconsistent
                         return consistent
                 except KeyError:
                     pass
 
             # no answer found in subsets, search in the supersets
-            for superset in self._find_sets(bit_key, 1):
+            for superset in self._find_sets_generator(bit_key, 1):
                 try:
                     consistent = self[superset]
-                    if consistent:
+                    if consistent:  # if a superset is consistent
                         return consistent
                 except KeyError:
                     pass
@@ -141,7 +153,6 @@ if __name__ == "__main__":
 
     n = 4
 
-
     bits = [bitarray(bin(i)[2:]) for i in range(32)]
 
     bits = [
@@ -151,10 +162,8 @@ if __name__ == "__main__":
         ]) for bit in bits
     ]
 
-
     for bit in bits:
         print(bit)
-
 
     sod = SOD(4)
     print("sod: ", sod)

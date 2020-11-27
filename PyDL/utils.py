@@ -1,9 +1,5 @@
-import matplotlib.pyplot as plt
 import numpy as np
-import scipy
-import scipy.optimize
 
-from bitstring import BitArray
 from bitarray import bitarray
 
 from typing import Generator, List, Union, Optional, Tuple
@@ -26,8 +22,10 @@ def ncr(n, k):
     denominator = reduce(op.mul, range(1, k+1), 1)
     return numerator // denominator
 
+
 def max_ncr(n):
     return ncr(n, n // 2)
+
 
 def not_empty_subsets(n, k):
     if k > n:
@@ -148,7 +146,7 @@ def banker_sequence(n, k, method='bitarray'):
 
     return create_generator(n, k, method)
 
-
+# I forgot why 'gac'
 def gac(x: Union[bitarray, int], n: Optional[int] = None) -> Union[bitarray, int]:
     """
     this function will take as argument a bitarray or an int
